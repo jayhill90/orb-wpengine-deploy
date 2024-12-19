@@ -21,6 +21,20 @@ steps:
             - ./vendor
         key: composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}
 
+    # Add debug step here, before any cache operations
+    - run:
+        name: Debug Theme Path
+        command: |
+            echo "THEME_PATH is set to: $THEME_PATH"
+            echo "Current directory:"
+            pwd
+            echo "Directory contents:"
+            ls -la
+            echo "Theme directory contents (if exists):"
+            ls -la $THEME_PATH || echo "Theme path not found"
+            echo "Looking for package-lock.json:"
+            ls -la ${THEME_PATH}/package-lock.json || echo "package-lock.json not found"
+
     # NPM Cache and Install from the theme path
     - restore_cache:
         keys:
