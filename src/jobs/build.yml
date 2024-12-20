@@ -6,22 +6,6 @@ executor: php
 steps:
     - checkout
 
-    # Composer Cache and Install
-    - restore_cache:
-        keys:
-            - composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}
-    - run:
-        name: Install composer dependencies
-        command: |
-          if [ -f composer.lock ]; then
-              composer install --no-ansi --no-interaction --no-progress --optimize-autoloader --prefer-dist
-          fi
-    - save_cache:
-        paths:
-            - ./vendor
-        key: composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}
-
-    # Add debug step here, before any cache operations
     - run:
         name: Debug Theme Path
         command: |
@@ -35,20 +19,72 @@ steps:
             echo "Looking for package-lock.json:"
             ls -la ${THEME_PATH}/package-lock.json || echo "package-lock.json not found"
 
-    # NPM Cache and Install from the theme path
+    # Before any cache operations
+    - run:
+        name: Set absolute theme path
+        command: |
+            echo "export ABSOLUTE_THEME_PATH=/home/circleci/project/${THEME_PATH}" >> $BASH_ENV
+            source $BASH_ENV
+
+    # Composer cache and install
     - restore_cache:
         keys:
-            - npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "${THEME_PATH}/package-lock.json" }}
+            - composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "/home/circleci/project/composer.lock" }}
+    - run:
+        name: Install composer dependencies
+        command: |
+            if [ -f composer.lock ]; then
+                composer install --no-ansi --no-interaction --no-progress --optimize-autoloader --prefer-dist
+            fi
+    - save_cache:
+        paths:
+            - /home/circleci/project/vendor
+        key: composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "/home/circleci/project/composer.lock" }}
+
+    # NPM cache and install
+    - restore_cache:
+        keys:
+            - npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "$ABSOLUTE_THEME_PATH/package-lock.json" }}
     - run:
         name: Install node dependencies
         command: |
             if [ -f ${THEME_PATH}/package-lock.json ]; then
-                npm --prefix $THEME_PATH install
+                npm --prefix $THEME_PATH install 
             fi
     - save_cache:
         paths:
-            - ${THEME_PATH}/node_modules  # Changed to match install location
-        key: npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "${THEME_PATH}/package-lock.json" }}
+            - ${THEME_PATH}/node_modules
+        key: npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "$ABSOLUTE_THEME_PATH/package-lock.json" }}
+
+    # # Composer Cache and Install
+    # - restore_cache:
+    #     keys:
+    #         - composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}
+    # - run:
+    #     name: Install composer dependencies
+    #     command: |
+    #       if [ -f composer.lock ]; then
+    #           composer install --no-ansi --no-interaction --no-progress --optimize-autoloader --prefer-dist
+    #       fi
+    # - save_cache:
+    #     paths:
+    #         - ./vendor
+    #     key: composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}
+
+    # # NPM Cache and Install from the theme path
+    # - restore_cache:
+    #     keys:
+    #         - npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "${THEME_PATH}/package-lock.json" }}
+    # - run:
+    #     name: Install node dependencies
+    #     command: |
+    #         if [ -f ${THEME_PATH}/package-lock.json ]; then
+    #             npm --prefix $THEME_PATH install
+    #         fi
+    # - save_cache:
+    #     paths:
+    #         - ${THEME_PATH}/node_modules  # Changed to match install location
+    #     key: npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "${THEME_PATH}/package-lock.json" }}
 
     # Build step
     - run:
