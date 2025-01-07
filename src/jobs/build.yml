@@ -5,43 +5,62 @@ executor: php
 
 steps:
     - checkout
-
-    - restore_cache:
-          keys:
-              - composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}
+    
+    # Generate checksum for npm cache
     - run:
-          name: Install composer dependencies
-          command: |
+        name: Generate NPM Cache Key
+        command: |
+            if [ -f "${THEME_PATH}/package-lock.json" ]; then
+                NPM_CHECKSUM=$(sha256sum "${THEME_PATH}/package-lock.json" | awk '{print $1}')
+                echo "export NPM_CACHE_CHECKSUM=${NPM_CHECKSUM}" >> $BASH_ENV
+            fi
+            source $BASH_ENV
+
+    # Composer cache and install
+    - restore_cache:
+        keys:
+            - 'composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}'
+            - 'composer-{{ .Environment.CACHE_VERSION }}-'
+
+    - run:
+        name: Install composer dependencies
+        command: |
             if [ -f composer.lock ]; then
                 composer install --no-ansi --no-interaction --no-progress --optimize-autoloader --prefer-dist
             fi
 
     - save_cache:
-          paths:
-              - ./vendor
-          key: composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}
+        paths:
+            - vendor
+        key: 'composer-{{ .Environment.CACHE_VERSION }}-{{ checksum "composer.lock" }}'
 
+    # NPM cache and install
     - restore_cache:
-          keys:
-              - npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "package-lock.json" }}
+        keys:
+            - 'npm-{{ .Environment.CACHE_VERSION }}-{{ .Environment.NPM_CACHE_CHECKSUM }}'
+            - 'npm-{{ .Environment.CACHE_VERSION }}-'
+
     - run:
-          name: Install node dependencies
-          command: |
-              if [ -f ${THEME_PATH}/package-lock.json ]; then
-                  npm --prefix $THEME_PATH install 
-              fi
+        name: Install node dependencies
+        command: |
+            if [ -f ${THEME_PATH}/package-lock.json ]; then
+                npm --prefix $THEME_PATH install 
+            fi
+
     - save_cache:
-          paths:
-              - ./node_modules
-          key: npm-{{ .Environment.CACHE_VERSION }}-{{ checksum "package-lock.json" }}
+        paths:
+            - ${THEME_PATH}/node_modules
+        key: 'npm-{{ .Environment.CACHE_VERSION }}-{{ .Environment.NPM_CACHE_CHECKSUM }}'
+
+    # Build step
     - run:
-          name: Build compiled files
-          command: |
-              if jq -e '.scripts.build' ${THEME_PATH}/package.json; then
-                  npm --prefix $THEME_PATH run build
-              fi
+        name: Build compiled files
+        command: |
+            if jq -e '.scripts.build' ${THEME_PATH}/package.json; then
+                npm --prefix $THEME_PATH run build
+            fi
 
     - persist_to_workspace:
-          root: /home/circleci/project
-          paths:
-              - .
+        root: /home/circleci/project
+        paths:
+            - .
